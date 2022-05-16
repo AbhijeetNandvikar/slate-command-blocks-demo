@@ -1,12 +1,12 @@
 // Import React dependencies.
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 import ReactDOM  from "react-dom";
 // Import the Slate editor factory.
-import { createEditor, Descendant, Editor, Transforms } from "slate";
+import { createEditor, Editor, Node, Transforms } from "slate";
 
 // Import the Slate components and React plugin.
-import { Slate, Editable, withReact, RenderElementProps, ReactEditor } from "slate-react";
+import { Slate, Editable, withReact, ReactEditor } from "slate-react";
 
 
 const withEditableVoids = editor => {
@@ -42,9 +42,24 @@ const EditorComponent = () => {
   const [target, setTarget] = useState()
   const [index, setIndex] = useState(0)
   const [search, setSearch] = useState('')
-  const [showPortal,setShowPortal] = useState(true)
+  const [showPortal,setShowPortal] = useState(false)
+  const withIcdCodes = editor => {
+    const { isInline, isVoid } = editor
+  
+    editor.isInline = element => {
+      return element.type === 'code' ? false : isInline(element)
+    }
+  
+    editor.isVoid = element => {
+      return element.type === 'code' ? false : isVoid(element)
+    }
+  
+    return editor
+  }
   const [editor] = useState(() => withEditableVoids(withReact(createEditor())));
   const [commandList,setCommandList] = useState([])
+
+  const [commandMode,setCommandMode] = useState(false)
 
   
   const initialValue= [
@@ -54,9 +69,37 @@ const EditorComponent = () => {
     },
   ];
 
+  
+
+  useEffect(() => {
+    if (target && commandList.length > 0) {
+      const el = ref.current
+      const domRange = ReactEditor.toDOMRange(editor, target)
+      const rect = domRange.getBoundingClientRect()
+      el.style.top = `${rect.top + window.pageYOffset + 24}px`
+      el.style.left = `${rect.left + window.pageXOffset}px`
+    }
+  }, [commandList.length, editor, index, search, target])
+
+  useEffect(()=>{
+    const newCommandList = commandOptions.filter(command=>{
+      return command.toLowerCase().includes(search.toLowerCase())
+    })
+    setCommandList(newCommandList)
+  },[search])
+
 
   const editorChangeHandler = (value) => {
-    console.log(value);
+    const {selection,children} = editor
+    if(commandMode){
+      const currentNode  = Node.get(editor,selection.anchor.path)
+      setTarget(selection)
+      const currentText = currentNode.text
+      const searchText = currentText.split('@')[1]
+      setSearch(searchText ?? '')
+    }
+    console.log(children)
+
   };
 
   const IcdCodeInput = (props) => {
@@ -87,7 +130,6 @@ const EditorComponent = () => {
           value={value}
           onChange={(event) => {
             setValue(event.target.value);
-            console.log(event.target.value);
           }}
           style={{ border: "1px solid black", borderRadius: "5px" }}
         /> <button onClick={()=>{
@@ -108,32 +150,77 @@ const EditorComponent = () => {
   };
   
 
-  const renderElement = useCallback((props) => {
+  const renderElement = (props) => {
+    console.log('renderElement',props)
     switch (props.element.type) {
       case "code":
         return <IcdCodeInput {...props} />;
       default:
         return <div {...props.attributes}>{props.children}</div>;
     }
-  }, []);
+  }
 
+  const executeCommand = () => {
+    const {selection,children} = editor
+    const currentNode  = Node.get(editor,selection.anchor.path)
+    switch(commandOptions[index]){
+      case 'ICD-10 Codes':{
+        console.log('ICD-10 Codes',selection)
+        Editor.deleteBackward(editor,{unit:'character'})
+        Transforms.insertNodes(editor, { type: 'code', data:['ICD-10 Codes'],children: [{ text: ''}]
+      });
 
-  const onKeyDownHandler = (event) => {
-      if (event.key === '/') {
-        event.preventDefault()
-        // Determine whether any of the currently selected blocks are code blocks.
-        const [match] = Editor.nodes(editor, {
-          match: n => n.type === 'code',
-        })
-        // Toggle the block type depending on whether there's already a match.
-        Transforms.setNodes(
-          editor,
-          { type: match ? 'paragraph' : 'code' }
-        )
+        break
       }
+      case 'CPT Codes':{
+        console.log('CPT Codes')
+        break
+    }
+    case 'Heading 1':{
+      console.log('Heading 1')
+      break
+    }
+    default:{
+      console.log('default')
+    }
     }
 
-  
+  }
+
+  const onKeyDownHandler = (event) => {
+      if(event.key === '@'){
+        setShowPortal(true)
+        setCommandMode(true)
+        setCommandList(commandOptions)
+      }else if(event.key === 'Escape'){
+        setShowPortal(false)
+        setCommandMode(false)
+        setCommandList([])
+        setTarget()
+      }else if(commandMode && event.key === 'ArrowDown'){
+        event.preventDefault()
+        setIndex(index+1)
+      }else if(commandMode && event.key === 'ArrowUp'){
+        event.preventDefault()
+        setIndex(index-1)
+      }else if(commandMode && event.key.length === 1 && /[a-z]/.test(event.key)){
+        if(commandList.length ===0){
+          setShowPortal(false)
+        setCommandMode(false)
+        setTarget()
+        }
+      }else if(commandMode && event.key === 'Enter'){
+        event.preventDefault()
+        setShowPortal(false)
+        setCommandMode(false)
+        setTarget()
+        executeCommand()
+      }else if(event.key === 'Enter'){
+        event.preventDefault()
+        Editor.insertNode(editor,{type:'paragraph',children:[{text:''}]})
+      }
+      
+    }  
 
   return (
     <>
@@ -148,24 +235,20 @@ const EditorComponent = () => {
             renderElement={renderElement}
             onKeyDown={onKeyDownHandler}
           />
-          <Portal>
 {     showPortal &&       <div style={{
-              top: '-9999px',
-              left: '-9999px',
-              position: 'absolute',
+            position: "absolute",
               zIndex: 1,
               padding: '3px',
               background: 'white',
               borderRadius: '4px',
               boxShadow: '0 1px 5px rgba(0,0,0,.2)',
             }} ref={ref}>
-              {commandOptions.map((command, index) => {
-                return <div  key={index} onClick={()=>{
+              {commandList.map((command, i) => {
+                return <div  key={i} style={i===index ? {background:"blue", color:"white"} : {}} onClick={()=>{
                   Transforms.setNodes(editor, { type: command })
                 }}>{command}</div>
               })}
             </div>}
-          </Portal>
         </Slate>
       </div>
     </>
@@ -173,3 +256,17 @@ const EditorComponent = () => {
 };
 
 export default EditorComponent;
+
+
+// if (event.key === '/') {
+//   event.preventDefault()
+//   // Determine whether any of the currently selected blocks are code blocks.
+//   const [match] = Editor.nodes(editor, {
+//     match: n => n.type === 'code',
+//   })
+//   // Toggle the block type depending on whether there's already a match.
+//   Transforms.setNodes(
+//     editor,
+//     { type: match ? 'paragraph' : 'code' }
+//   )
+// }
