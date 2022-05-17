@@ -40,22 +40,22 @@ const commandOptions = [
 const EditorComponent = () => {
   const ref = useRef()
   const [target, setTarget] = useState()
-  const [index, setIndex] = useState(0)
-  const [search, setSearch] = useState('')
-  const [showPortal,setShowPortal] = useState(false)
-  const withIcdCodes = editor => {
-    const { isInline, isVoid } = editor
+  const [commandIndex, setCommandIndex] = useState(0)
+  const [commandSearch, setCommandSearch] = useState('')
+  const [showCommandMenu,setShowcommandMenu] = useState(false)
+  // const withIcdCodes = editor => {
+  //   const { isInline, isVoid } = editor
   
-    editor.isInline = element => {
-      return element.type === 'code' ? false : isInline(element)
-    }
+  //   editor.isInline = element => {
+  //     return element.type === 'code' ? false : isInline(element)
+  //   }
   
-    editor.isVoid = element => {
-      return element.type === 'code' ? false : isVoid(element)
-    }
+  //   editor.isVoid = element => {
+  //     return element.type === 'code' ? false : isVoid(element)
+  //   }
   
-    return editor
-  }
+  //   return editor
+  // }
   const [editor] = useState(() => withEditableVoids(withReact(createEditor())));
   const [commandList,setCommandList] = useState([])
 
@@ -79,14 +79,14 @@ const EditorComponent = () => {
       el.style.top = `${rect.top + window.pageYOffset + 24}px`
       el.style.left = `${rect.left + window.pageXOffset}px`
     }
-  }, [commandList.length, editor, index, search, target])
+  }, [commandList.length, editor, commandIndex, commandSearch, target])
 
   useEffect(()=>{
     const newCommandList = commandOptions.filter(command=>{
-      return command.toLowerCase().includes(search.toLowerCase())
+      return command.toLowerCase().includes(commandSearch.toLowerCase())
     })
     setCommandList(newCommandList)
-  },[search])
+  },[commandSearch])
 
 
   const editorChangeHandler = (value) => {
@@ -96,7 +96,7 @@ const EditorComponent = () => {
       setTarget(selection)
       const currentText = currentNode.text
       const searchText = currentText.split('@')[1]
-      setSearch(searchText ?? '')
+      setCommandSearch(searchText ?? '')
     }
     console.log(children)
 
@@ -163,7 +163,7 @@ const EditorComponent = () => {
   const executeCommand = () => {
     const {selection,children} = editor
     const currentNode  = Node.get(editor,selection.anchor.path)
-    switch(commandOptions[index]){
+    switch(commandOptions[commandIndex]){
       case 'ICD-10 Codes':{
         console.log('ICD-10 Codes',selection)
         Editor.deleteBackward(editor,{unit:'character'})
@@ -189,29 +189,29 @@ const EditorComponent = () => {
 
   const onKeyDownHandler = (event) => {
       if(event.key === '@'){
-        setShowPortal(true)
+        setShowcommandMenu(true)
         setCommandMode(true)
         setCommandList(commandOptions)
       }else if(event.key === 'Escape'){
-        setShowPortal(false)
+        setShowcommandMenu(false)
         setCommandMode(false)
         setCommandList([])
         setTarget()
       }else if(commandMode && event.key === 'ArrowDown'){
         event.preventDefault()
-        setIndex(index+1)
+        setCommandIndex(commandIndex+1)
       }else if(commandMode && event.key === 'ArrowUp'){
         event.preventDefault()
-        setIndex(index-1)
+        setCommandIndex(commandIndex-1)
       }else if(commandMode && event.key.length === 1 && /[a-z]/.test(event.key)){
         if(commandList.length ===0){
-          setShowPortal(false)
+          setShowcommandMenu(false)
         setCommandMode(false)
         setTarget()
         }
       }else if(commandMode && event.key === 'Enter'){
         event.preventDefault()
-        setShowPortal(false)
+        setShowcommandMenu(false)
         setCommandMode(false)
         setTarget()
         executeCommand()
@@ -235,7 +235,7 @@ const EditorComponent = () => {
             renderElement={renderElement}
             onKeyDown={onKeyDownHandler}
           />
-{     showPortal &&       <div style={{
+{     showCommandMenu &&       <div style={{
             position: "absolute",
               zIndex: 1,
               padding: '3px',
@@ -244,7 +244,7 @@ const EditorComponent = () => {
               boxShadow: '0 1px 5px rgba(0,0,0,.2)',
             }} ref={ref}>
               {commandList.map((command, i) => {
-                return <div  key={i} style={i===index ? {background:"blue", color:"white"} : {}} onClick={()=>{
+                return <div  key={i} style={i===commandIndex ? {background:"blue", color:"white"} : {}} onClick={()=>{
                   Transforms.setNodes(editor, { type: command })
                 }}>{command}</div>
               })}
